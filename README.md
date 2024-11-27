@@ -1,3 +1,3 @@
 # mtools
 
-Maybe, *mt*ools means MirageTurtle's tools.
+Maybe, **mt**ools means MirageTurtle's tools.

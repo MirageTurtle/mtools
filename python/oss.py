@@ -31,7 +31,7 @@ def oss_upload_dir(dirpath: str, remote_dir: str, bucket_name: str="alertreducti
         s3_client = session.client('s3', endpoint_url=url)
         dirpath_prefix = dirpath if dirpath[-1] == '/' else dirpath + '/'
         for root, dirs, files in os.walk(dirpath):
-            for file in files:                
+            for file in files:
                 local_file = os.path.join(root, file)
                 remote_file = os.path.join(remote_dir, local_file.replace(dirpath_prefix, ''))
                 print(f"[*] Uploading {local_file} to {remote_file}")
@@ -43,7 +43,6 @@ def oss_upload_dir(dirpath: str, remote_dir: str, bucket_name: str="alertreducti
                 )
     except Exception as e:
         raise e
-    
 
 def oss_download(
         # access_key: str,
@@ -58,7 +57,8 @@ def oss_download(
         s3_client = session.client('s3', endpoint_url=url)
         result = s3_client.get_object(Bucket=bucket_name, Key=key)
         if local_save_dir is not None:
-            with open(os.path.join(local_save_dir, key), 'wb') as f:
+            filename = key.split("/")[-1]
+            with open(os.path.join(local_save_dir, filename), 'wb') as f:
                 f.write(result['Body'].read())
         return result['Body'].read()
     except Exception as e:

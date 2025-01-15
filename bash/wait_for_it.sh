@@ -11,7 +11,14 @@ pid=$1
 shift  # remove the first argument
 cmd=$@
 
+spinner=("|" "/" "-" "\\")
+spinner_length=${#spinner[@]}
+idx=0
+
 while kill -0 $pid 2>/dev/null; do
+    idx=$((idx % spinner_length))
+    echo -ne "\rWaiting for task $pid to finish... ${spinner[$idx]}"
+    idx=$((idx + 1))
     sleep 1
 done
 

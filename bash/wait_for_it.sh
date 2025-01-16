@@ -21,5 +21,7 @@ while kill -0 $pid 2>/dev/null; do
     idx=$((idx + 1))
     sleep 1
 done
+echo -e "\rTask $pid is finished.\n"
+
 
 eval $cmd

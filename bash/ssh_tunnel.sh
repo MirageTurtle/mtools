@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if [ "$#" -ne 4 ]; then
-    echo "Usage: $0 <local_port> <remote_user> <remote_host> <remote_port>"
+if [ "$#" -ne 5 ]; then
+    echo "Usage: $0 <local_port> <remote_user> <remote_host> <remote_port> <ssh_key>"
     exit 1
 fi
 
@@ -13,22 +13,25 @@ REMOTE_HOST=$3
 LOCAL_PORT=$1
 REMOTE_PORT=$4
 
+# SSH key
+SSH_KEY=$(realpath $5)
+
 # Function to check if the tunnel is alive
 check_tunnel() {
-    # Use ss command to check if the port is listening
-    if ss -tunlp | grep -q ":${LOCAL_PORT}"; then
-        echo "Tunnel is alive"
+    # Check if the specific SSH process is running
+    if ps auxww | grep -q "[s]sh -N -i ${SSH_KEY} -R ${REMOTE_PORT}:localhost:${LOCAL_PORT} ${REMOTE_USER}@${REMOTE_HOST}" > /dev/null; then
+        echo -n -e "\r$(date) Tunnel is alive!"
         return 0
     else
-        echo "Tunnel is not alive"
+        echo -e "\n$(date) Tunnel is not alive"
         return 1
     fi
 }
 
 # Function to create the tunnel
 create_tunnel() {
-    echo "Creating tunnel..."
-    ssh -N -R ${REMOTE_PORT}:localhost:${LOCAL_PORT} ${REMOTE_USER}@${REMOTE_HOST} &
+    echo "$(date) Creating tunnel..."
+    ssh -N -i ${SSH_KEY} -R ${REMOTE_PORT}:localhost:${LOCAL_PORT} ${REMOTE_USER}@${REMOTE_HOST} &
     TUNNEL_PID=$!
 }
 
@@ -38,6 +41,6 @@ while true; do
         # If the tunnel is not alive, create a new one
         create_tunnel
     fi
-    # Check every half hour
-    sleep 1800
+    # Check every minute
+    sleep 60
 done

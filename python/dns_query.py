@@ -45,9 +45,11 @@ def extract_domains_from_list(domains: list) -> list:
     valid_domains = []
     for domain in domains:
         # only allow domain or http(s)://domain
-        if re.match(r"^(https?://)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$", domain):
+        if re.match(r"^(https?://)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:\d+)?$", domain):
             logger.debug(f"Valid domain found: {domain}")
-            valid_domains.append(re.sub(r"^(https?://)?", "", domain).strip())
+            valid_domain = re.sub(r"^(https?://)?", "", domain).strip()
+            valid_domain = re.sub(r":\d+$", "", valid_domain)
+            valid_domains.append(valid_domain)
         else:
             logger.warning(f"Invalid domain format: {domain}")
     return valid_domains

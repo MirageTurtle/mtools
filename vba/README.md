@@ -1,0 +1,1 @@
+Someday, I need to export a slide with PDF format from pptx file. I convert the simple animation into multi slide pages. However the page numbers are messed up, so `UpdateSlideNumbersAndContinueAfterSelection.vba` is written by ChatGPT for this.

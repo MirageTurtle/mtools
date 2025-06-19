@@ -3,12 +3,10 @@
 // @namespace    https://mirageturtle.top
 // @version      1.0
 // @description  Find and open specific images on Canva in new tabs
-// @author       You
+// @author       DeepSeek & MirageTurtle
 // @match        https://www.canva.com/*
 // @grant        none
 // ==/UserScript==
-
-// Most of the code is written by DeepSeek
 
 (function () {
 	"use strict";

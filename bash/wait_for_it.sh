@@ -3,32 +3,78 @@
 # This script is used to run a task when specific tasks(PIDs) are finished.
 # Usage:
 #   ./wait_for_it.sh <pid1> <pid2> ... <pidN> -- <command>
+#   ./wait_for_it.sh --interactive -- <command>
+#   ./wait_for_it.sh -i -- <command>
 # Example:
 #   ./wait_for_it.sh 1234 5678 -- echo "Tasks 1234 and 5678 are finished."
 #   ./wait_for_it.sh 1234 5678 9012 -- "cd /path/to/your/project && your_command"  # note the quotes
+#   ./wait_for_it.sh --interactive -- echo "All selected processes finished"
 
 # Initialize arrays to store PIDs and track their status
 pids=()
 completed=()
+interactive_mode=0
 
 # Parse arguments to separate PIDs from the command
 while [[ $# -gt 0 ]]; do
 	if [[ "$1" == "--" ]]; then
 		shift # Remove the -- separator
 		break # Everything after -- is the command
+	elif [[ "$1" == "--interactive" ]] || [[ "$1" == "-i" ]]; then
+		interactive_mode=1
+		shift
+	else
+		pids+=("$1")
+		completed+=(0) # 0 means not completed (numeric, not string)
+		shift
 	fi
-	pids+=("$1")
-	completed+=(0) # 0 means not completed (numeric, not string)
-	shift
 done
 
 # The rest of the arguments form the command
 cmd="$@"
 
+# Interactive mode: use fzf to select PIDs
+if [ $interactive_mode -eq 1 ]; then
+	# Check if fzf is installed
+	if ! command -v fzf &> /dev/null; then
+		echo "Error: fzf is not installed. Please install fzf to use interactive mode."
+		echo "Install with: brew install fzf (macOS) or apt install fzf (Linux)"
+		exit 1
+	fi
+
+	echo "Select processes to monitor (use TAB to select multiple, ENTER to confirm):"
+
+	# Get process list with PID and full command, format for fzf
+	# Use ps with custom format: PID, full command
+	selected=$(ps -eo pid,args | tail -n +2 | \
+		fzf --multi \
+		    --header="TAB: select/deselect | ENTER: confirm | ESC: cancel" \
+		    --preview="ps -p {1} -o pid,ppid,user,%cpu,%mem,etime,command" \
+		    --preview-window=down:3:wrap \
+		    --bind="tab:toggle+down" \
+		    --height=80%)
+
+	# Check if user cancelled
+	if [ -z "$selected" ]; then
+		echo "No processes selected. Exiting."
+		exit 0
+	fi
+
+	# Extract PIDs from selected lines
+	while IFS= read -r line; do
+		pid=$(echo "$line" | awk '{print $1}')
+		pids+=("$pid")
+		completed+=(0)
+	done <<< "$selected"
+
+	echo "Selected ${#pids[@]} process(es): ${pids[*]}"
+fi
+
 # Check if we have PIDs to monitor
 if [ ${#pids[@]} -eq 0 ]; then
 	echo "Error: No PIDs specified."
 	echo "Usage: ./wait_for_it.sh <pid1> <pid2> ... <pidN> -- <command>"
+	echo "   or: ./wait_for_it.sh --interactive -- <command>"
 	exit 1
 fi
 

@@ -234,16 +234,12 @@
 
     // Try to initialize immediately
     if (!initialize()) {
-        // If not ready, use MutationObserver instead of setInterval
-        const observer = new MutationObserver(() => {
+        // Poll at a reasonable interval instead of observing every DOM mutation,
+        // which causes severe performance issues in Firefox on dynamic SPAs.
+        const initInterval = setInterval(() => {
             if (initialize()) {
-                observer.disconnect();
+                clearInterval(initInterval);
             }
-        });
-
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        }, 500);
     }
 })();

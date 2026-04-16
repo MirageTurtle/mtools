@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         bulk_delete_chatgpt
 // @namespace    https://mirageturtle.top
-// @version      1.0
+// @version      1.1
 // @description  Add bulk delete to chat gpt
 // @author       MirageTurtle
 // @match        https://chatgpt.com/*
@@ -18,12 +18,12 @@
     let lastClickedCheckbox = null;  // Track last clicked checkbox for range selection
     let checkboxOrder = [];          // Maintain ordered list of checkboxes for range calculation
 
-    // Function to create button with bin icon
+    // Function to create floating button with bin icon
     function createBulkDeleteButton() {
         const button = document.createElement("button");
         button.id = "bulk-delete-btn";
         button.innerHTML = `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 <line x1="10" y1="11" x2="10" y2="17"></line>
@@ -31,17 +31,30 @@
             </svg>
         `;
         button.style.cssText = `
-            padding: 8px;
-            margin: 8px 0;
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 6px;
-            background: transparent;
-            color: inherit;
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 9999;
+            padding: 12px;
+            border: none;
+            border-radius: 50%;
+            background: #dc2626;
+            color: white;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transition: transform 0.2s, background 0.2s;
         `;
+        button.addEventListener("mouseenter", () => {
+            button.style.transform = "scale(1.1)";
+            button.style.background = "#b91c1c";
+        });
+        button.addEventListener("mouseleave", () => {
+            button.style.transform = "scale(1)";
+            button.style.background = "#dc2626";
+        });
         button.addEventListener("click", handleButtonClick);
         return button;
     }
@@ -220,26 +233,15 @@
         }
     }
 
-    // Initialize when nav is ready
+    // Initialize floating button
     function initialize() {
-        const nav = document.querySelector("nav");
-        const navDiv = nav?.querySelector("div");
-        if (navDiv && !bulkDeleteButton) {
+        if (!bulkDeleteButton) {
             bulkDeleteButton = createBulkDeleteButton();
-            navDiv.insertAdjacentElement("afterend", bulkDeleteButton);
-            return true; // Success
+            document.body.appendChild(bulkDeleteButton);
+            return true;
         }
-        return false; // Not ready yet
+        return false;
     }
 
-    // Try to initialize immediately
-    if (!initialize()) {
-        // Poll at a reasonable interval instead of observing every DOM mutation,
-        // which causes severe performance issues in Firefox on dynamic SPAs.
-        const initInterval = setInterval(() => {
-            if (initialize()) {
-                clearInterval(initInterval);
-            }
-        }, 500);
-    }
+    initialize();
 })();

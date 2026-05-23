@@ -1,8 +1,12 @@
 // ==UserScript==
 // @name         Visa API Monitor
+// @namespace    https://mirageturtle.top/
+// @version      1.1
+// @description  Monitor visa schedule API responses for early slot availability
+// @author       MirageTurtle
 // @match        https://www.usvisascheduling.com/*
 // @run-at       document-start
-// @version      1.1
+// @grant        none
 // ==/UserScript==
 
 (function () {
@@ -45,11 +49,11 @@
     };
 
     const originalXhrSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.send = function (body) {
+    XMLHttpRequest.prototype.send = function (_body) {
         this.addEventListener("load", function () {
             if (this._url && this._url.includes(TARGET_URL)) {
-                console.log("拦截到 XHR 请求:", this._url);
-                // console.log('返回数据:', this.responseText);
+                console.log("Intercepted XHR request:", this._url);
+                // console.log('Response data:', this.responseText);
 
                 try {
                     const trimmed = this.responseText.trim();

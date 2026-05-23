@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name         Auto Select Consular Post
+// @namespace    https://mirageturtle.top/
 // @version      1.2
-// @description  Auto switch select option
+// @description  Auto select the only available consular post option
+// @author       MirageTurtle
 // @match        https://www.usvisascheduling.com/*
 // @grant        none
 // ==/UserScript==
@@ -48,49 +50,49 @@
         const select = document.querySelector("#post_select");
 
         if (!select) {
-            showToast("未找到 #post_select");
+            showToast("#post_select not found");
             return;
         }
 
-        // 先清空
+        // Clear selection first
         select.value = "";
         triggerChange(select);
 
-        // 等待 AJAX 更新
+        // Wait for AJAX update
         await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // 获取有效 option
+        // Get valid options
         const validOptions = [...select.options].filter(
             (option) => option.value && option.value.trim() !== "",
         );
 
         if (validOptions.length === 0) {
-            showToast("没有可用的 Consular Post");
+            showToast("No available Consular Post");
             return;
         }
 
         if (validOptions.length > 1) {
-            showToast(`发现 ${validOptions.length} 个有效选项`);
+            showToast(`Found ${validOptions.length} valid options`);
             return;
         }
 
-        // 自动选择
+        // Auto select
         select.value = validOptions[0].value;
         triggerChange(select);
 
-        showToast(`已选择: ${validOptions[0].text}`);
+        showToast(`Selected: ${validOptions[0].text}`);
     }
 
     function createButton() {
-        // 找按钮区域
+        // Find button container
         const container = document.querySelector(".col-sm-12.mt-3");
 
         if (!container) {
-            console.error("未找到按钮容器");
+            console.error("Button container not found");
             return;
         }
 
-        // 防止重复创建
+        // Prevent duplicate button
         if (document.querySelector("#auto_select_btn")) {
             return;
         }
@@ -101,15 +103,15 @@
         btn.type = "button";
         btn.textContent = "Auto Select";
 
-        // 复用网站原本按钮样式
+        // Reuse site's native button style
         btn.className = "btn-atlas btn-atlas-submit pull-right";
 
-        // 与 Submit 按钮保持间距
+        // Spacing from Submit button
         btn.style.marginRight = "10px";
 
         btn.addEventListener("click", handleSelect);
 
-        // 插入到 Submit 按钮前面
+        // Insert after Submit button
         const submitBtn = document.querySelector("#submitbtn");
 
         if (submitBtn) {

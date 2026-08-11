@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Checkee Visa Table Filter
 // @namespace    https://mirageturtle.top/
-// @version      1.0
+// @version      1.2
 // @description  Add live, combinable filters to the Checkee visa status table
 // @author       MirageTurtle
 // @match        *://checkee.info/main.php*
@@ -19,9 +19,8 @@
         "Visa Type",
         "Visa Entry",
         "US Consulate",
+        "Major",
         "Status",
-        "Check Date",
-        "Waiting Day(s)",
     ];
 
     function normalize(value) {
@@ -97,7 +96,6 @@
                 color: #34495e;
             }
 
-            #${PANEL_ID} input,
             #${PANEL_ID} select,
             #${PANEL_ID} button {
                 box-sizing: border-box;
@@ -109,16 +107,86 @@
                 font: inherit;
             }
 
-            #${PANEL_ID} input,
             #${PANEL_ID} select {
                 width: 100%;
                 padding: 6px 8px;
             }
 
-            #${PANEL_ID} input:focus,
             #${PANEL_ID} select:focus {
                 border-color: #2474b5;
                 outline: 2px solid rgba(36, 116, 181, 0.18);
+            }
+
+            #${PANEL_ID} .checkee-multi-select {
+                position: relative;
+            }
+
+            #${PANEL_ID} .checkee-multi-select summary {
+                box-sizing: border-box;
+                min-height: 34px;
+                padding: 6px 30px 6px 8px;
+                overflow: hidden;
+                border: 1px solid #9aa9b8;
+                border-radius: 5px;
+                background: #fff;
+                cursor: pointer;
+                list-style: none;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            #${PANEL_ID} .checkee-multi-select summary::-webkit-details-marker {
+                display: none;
+            }
+
+            #${PANEL_ID} .checkee-multi-select summary::after {
+                position: absolute;
+                top: 8px;
+                right: 10px;
+                content: "▼";
+                color: #52667a;
+                font-size: 11px;
+            }
+
+            #${PANEL_ID} .checkee-multi-select[open] summary {
+                border-color: #2474b5;
+                outline: 2px solid rgba(36, 116, 181, 0.18);
+            }
+
+            #${PANEL_ID} .checkee-multi-select-options {
+                position: absolute;
+                z-index: 1000;
+                top: calc(100% + 4px);
+                right: 0;
+                min-width: 100%;
+                width: max-content;
+                max-width: min(420px, 90vw);
+                max-height: 260px;
+                padding: 6px;
+                overflow: auto;
+                border: 1px solid #9aa9b8;
+                border-radius: 5px;
+                background: #fff;
+                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.18);
+            }
+
+            #${PANEL_ID} label.checkee-multi-select-option {
+                display: flex;
+                align-items: flex-start;
+                gap: 7px;
+                padding: 5px 7px;
+                border-radius: 3px;
+                cursor: pointer;
+                font-weight: 400;
+                white-space: nowrap;
+            }
+
+            #${PANEL_ID} label.checkee-multi-select-option:hover {
+                background: #edf3f8;
+            }
+
+            #${PANEL_ID} .checkee-multi-select-option input {
+                margin: 2px 0 0;
             }
 
             #${PANEL_ID} .checkee-filter-actions {
@@ -168,14 +236,6 @@
         return wrapper;
     }
 
-    function createInput(id, type = "text", placeholder = "") {
-        const input = document.createElement("input");
-        input.id = id;
-        input.type = type;
-        input.placeholder = placeholder;
-        return input;
-    }
-
     function createSelect(id, values) {
         const select = document.createElement("select");
         select.id = id;
@@ -195,6 +255,49 @@
         return select;
     }
 
+    function createMultiSelect(id, values) {
+        const dropdown = document.createElement("details");
+        dropdown.id = id;
+        dropdown.className = "checkee-multi-select";
+
+        const summary = document.createElement("summary");
+        summary.textContent = "All";
+
+        const options = document.createElement("div");
+        options.className = "checkee-multi-select-options";
+
+        values.forEach((value, index) => {
+            const option = document.createElement("label");
+            option.className = "checkee-multi-select-option";
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = value;
+            checkbox.id = `${id}-${index}`;
+
+            const text = document.createElement("span");
+            text.textContent = value;
+            option.append(checkbox, text);
+            options.appendChild(option);
+        });
+
+        dropdown.addEventListener("change", () => {
+            const selected = [
+                ...dropdown.querySelectorAll('input[type="checkbox"]:checked'),
+            ];
+            summary.textContent =
+                selected.length === 0
+                    ? "All"
+                    : selected.length === 1
+                      ? selected[0].value
+                      : `${selected.length} selected`;
+            summary.title = selected.map((checkbox) => checkbox.value).join(", ");
+        });
+
+        dropdown.append(summary, options);
+        return dropdown;
+    }
+
     function installFilter(table) {
         if (document.getElementById(PANEL_ID)) return;
 
@@ -206,11 +309,6 @@
         addStyles();
 
         const controls = {
-            search: createInput(
-                "checkee-filter-search",
-                "search",
-                "ID, major, details...",
-            ),
             visaType: createSelect(
                 "checkee-filter-visa-type",
                 getUniqueValues(rows, columns["Visa Type"]),
@@ -227,15 +325,11 @@
                 "checkee-filter-status",
                 getUniqueValues(rows, columns.Status),
             ),
-            major: createInput("checkee-filter-major", "search", "e.g. CS, Biology"),
-            dateFrom: createInput("checkee-filter-date-from", "date"),
-            dateTo: createInput("checkee-filter-date-to", "date"),
-            waitingMin: createInput("checkee-filter-waiting-min", "number", "Min"),
-            waitingMax: createInput("checkee-filter-waiting-max", "number", "Max"),
+            major: createMultiSelect(
+                "checkee-filter-major",
+                getUniqueValues(rows, columns.Major),
+            ),
         };
-
-        controls.waitingMin.min = "0";
-        controls.waitingMax.min = "0";
 
         const panel = document.createElement("section");
         panel.id = PANEL_ID;
@@ -244,16 +338,11 @@
         const grid = document.createElement("div");
         grid.className = "checkee-filter-grid";
         grid.append(
-            createField("Search", controls.search, true),
             createField("Visa Type", controls.visaType),
             createField("Visa Entry", controls.visaEntry),
             createField("US Consulate", controls.consulate),
             createField("Status", controls.status),
-            createField("Major contains", controls.major),
-            createField("Check Date from", controls.dateFrom),
-            createField("Check Date to", controls.dateTo),
-            createField("Waiting days min", controls.waitingMin),
-            createField("Waiting days max", controls.waitingMax),
+            createField("Majors", controls.major),
         );
 
         const actions = document.createElement("div");
@@ -272,39 +361,24 @@
         table.insertAdjacentElement("beforebegin", panel);
 
         function applyFilters() {
+            const selectedMajors = new Set(
+                [
+                    ...controls.major.querySelectorAll(
+                        'input[type="checkbox"]:checked',
+                    ),
+                ].map((checkbox) => checkbox.value),
+            );
             const filters = {
-                search: controls.search.value.trim().toLocaleLowerCase(),
                 visaType: controls.visaType.value,
                 visaEntry: controls.visaEntry.value,
                 consulate: controls.consulate.value,
                 status: controls.status.value,
-                major: controls.major.value.trim().toLocaleLowerCase(),
-                dateFrom: controls.dateFrom.value,
-                dateTo: controls.dateTo.value,
-                waitingMin:
-                    controls.waitingMin.value === ""
-                        ? null
-                        : Number(controls.waitingMin.value),
-                waitingMax:
-                    controls.waitingMax.value === ""
-                        ? null
-                        : Number(controls.waitingMax.value),
             };
 
             let visibleCount = 0;
 
             rows.forEach((row) => {
-                const checkDate = getCellText(row, columns["Check Date"]);
-                const waitingDays = Number(
-                    getCellText(row, columns["Waiting Day(s)"]),
-                );
-                const details = [...row.querySelectorAll("[title]")]
-                    .map((element) => element.getAttribute("title") || "")
-                    .join(" ");
-                const searchableText = `${row.textContent} ${details}`.toLocaleLowerCase();
-
                 const visible =
-                    (!filters.search || searchableText.includes(filters.search)) &&
                     (!filters.visaType ||
                         getCellText(row, columns["Visa Type"]) === filters.visaType) &&
                     (!filters.visaEntry ||
@@ -313,14 +387,8 @@
                         getCellText(row, columns["US Consulate"]) === filters.consulate) &&
                     (!filters.status ||
                         getCellText(row, columns.Status) === filters.status) &&
-                    (!filters.major ||
-                        getCellText(row, columns.Major)
-                            .toLocaleLowerCase()
-                            .includes(filters.major)) &&
-                    (!filters.dateFrom || checkDate >= filters.dateFrom) &&
-                    (!filters.dateTo || checkDate <= filters.dateTo) &&
-                    (filters.waitingMin === null || waitingDays >= filters.waitingMin) &&
-                    (filters.waitingMax === null || waitingDays <= filters.waitingMax);
+                    (selectedMajors.size === 0 ||
+                        selectedMajors.has(getCellText(row, columns.Major)));
 
                 row.hidden = !visible;
                 if (visible) visibleCount += 1;
@@ -330,16 +398,40 @@
         }
 
         Object.values(controls).forEach((control) => {
-            control.addEventListener("input", applyFilters);
             control.addEventListener("change", applyFilters);
+        });
+
+        document.addEventListener("click", (event) => {
+            if (controls.major.open && !controls.major.contains(event.target)) {
+                controls.major.open = false;
+            }
+        });
+
+        controls.major.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                controls.major.open = false;
+                controls.major.querySelector("summary").focus();
+            }
         });
 
         reset.addEventListener("click", () => {
             Object.values(controls).forEach((control) => {
-                control.value = "";
+                if (control === controls.major) {
+                    [...control.querySelectorAll('input[type="checkbox"]')].forEach(
+                        (checkbox) => {
+                            checkbox.checked = false;
+                        },
+                    );
+                    const summary = control.querySelector("summary");
+                    summary.textContent = "All";
+                    summary.removeAttribute("title");
+                    control.open = false;
+                } else {
+                    control.value = "";
+                }
             });
             applyFilters();
-            controls.search.focus();
+            controls.visaType.focus();
         });
 
         applyFilters();

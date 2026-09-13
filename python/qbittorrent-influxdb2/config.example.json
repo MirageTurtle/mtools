@@ -1,0 +1,15 @@
+{
+  "qbittorrent": {
+    "url": "http://localhost:8080",
+    "username": "admin",
+    "password": "replace-with-your-password",
+    "timeout": 30,
+    "verify_ssl": true
+  },
+  "influxdb": {
+    "url": "http://localhost:8086",
+    "token": "replace-with-an-api-token",
+    "org": "my-org",
+    "bucket": "qbittorrent"
+  }
+}

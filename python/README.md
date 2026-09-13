@@ -10,3 +10,4 @@ Some tools written in Python.
 | [`ip_net_check.py`](./ip_net_check.py) | Check whether an IP belongs to a CIDR network. |
 | [`vmess_to_singbox.py`](./vmess_to_singbox.py) | Convert a `vmess://` URL to sing-box outbound JSON. |
 | [`env_test.py`](./env_test.py) | Print Python, OS, PyTorch, and CUDA environment info. |
+| [`qbittorrent-influxdb2`](./qbittorrent-influxdb2/) | Collect qBittorrent statistics in InfluxDB 2.x. |

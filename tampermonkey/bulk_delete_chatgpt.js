@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         bulk_delete_chatgpt
 // @namespace    https://mirageturtle.top
-// @version      1.1
+// @version      1.4
 // @description  Add bulk delete to chat gpt
 // @author       MirageTurtle
 // @match        https://chatgpt.com/*
+// @run-at       document-idle
 // @grant        none
 // ==/UserScript==
 
@@ -12,11 +13,18 @@
     "use strict";
 
     // Variables to store selected status
-    let selectedChats = new Set();
+    const CHAT_ROW = '[data-sidebar-chatgpt-conversation-key^="chatgpt:conversation:"]';
+    const selectedChats = new Set();
     let isCheckboxMode = false;
+    let isDeleting = false;
+    const DELETE_ATTEMPTS = 3;
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     let bulkDeleteButton = null;
-    let lastClickedCheckbox = null;  // Track last clicked checkbox for range selection
-    let checkboxOrder = [];          // Maintain ordered list of checkboxes for range calculation
+    let lastClickedChatId = null; // Keep the range anchor across sidebar rerenders
+    let checkboxOrder = [];
+    const sidebarObserver = new MutationObserver(() => {
+        if (isCheckboxMode) addCheckboxes();
+    });
 
     // Function to create floating button with bin icon
     function createBulkDeleteButton() {
@@ -59,51 +67,89 @@
         return button;
     }
 
-    // Function to add checkboxes
+    function getChatLinks() {
+        // Scope to sidebar rows, including the older layouts, not links in messages.
+        return document.querySelectorAll(
+            `${CHAT_ROW} a[href*="/c/"], #history a[href*="/c/"], a[data-sidebar-item][href*="/c/"]`,
+        );
+    }
+
+    function getChatId(link) {
+        const url = new URL(link.href, document.baseURI);
+        if (url.origin !== new URL(document.baseURI).origin) return null;
+        return url.pathname.match(/\/c\/([^/]+)\/?$/)?.[1] || null;
+    }
+
+    // Add missing checkboxes and rebuild the full order after sidebar updates.
     function addCheckboxes() {
-        checkboxOrder = []; // Reset order array
-        const historyDiv = document.getElementById("history");
-        if (!historyDiv) return;
+        // Ignore our own DOM insertions so they cannot trigger an observer loop.
+        sidebarObserver.disconnect();
+        checkboxOrder = [];
+        getChatLinks().forEach((link) => {
+            const chatId = getChatId(link);
+            if (!chatId) return;
 
-        const chatLinks = historyDiv.querySelectorAll('a[href^="/c/"]');
-        chatLinks.forEach((link) => {
-            if (link.querySelector(".bulk-checkbox")) return;
+            let checkbox = link.querySelector(".bulk-checkbox");
+            if (!checkbox) {
+                checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.className = "bulk-checkbox";
+                // ChatGPT resets checkboxes to appearance: none at 0x0, so override it.
+                checkbox.style.cssText = [
+                    "appearance: auto", "width: 16px", "height: 16px", "min-width: 16px", "margin: 0", "margin-inline-end: 8px",
+                    "flex-shrink: 0", "align-self: center", "cursor: pointer", "pointer-events: auto",
+                    "position: relative", "z-index: 1",
+                ].map((rule) => `${rule} !important;`).join(" ");
 
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.className = "bulk-checkbox";
-            checkbox.style.cssText = "margin-right: 8px; cursor: pointer;";
+                // The new conversation rows are draggable.
+                checkbox.addEventListener("pointerdown", (event) => event.stopPropagation());
+                checkbox.addEventListener("mousedown", (event) => event.stopPropagation());
+                checkbox.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    event.preventDefault();
+                    const clickedChatId = checkbox.dataset.chatId;
+                    const targetState = !selectedChats.has(clickedChatId);
 
-            const chatId = link.href.split("/c/")[1];
+                    // Cancelling navigation also cancels the native checkbox toggle.
+                    setTimeout(() => {
+                        if (!isCheckboxMode || !checkbox.isConnected || checkbox.dataset.chatId !== clickedChatId) return;
+                        addCheckboxes();
+                        if (event.shiftKey && lastClickedChatId) {
+                            handleRangeSelection(checkbox, lastClickedChatId, targetState);
+                        } else {
+                            handleSingleSelection(checkbox, targetState);
+                        }
+                        lastClickedChatId = clickedChatId;
+                        checkboxOrder.forEach((box) => {
+                            box.checked = selectedChats.has(box.dataset.chatId);
+                        });
+                    }, 0);
+                });
+                link.insertAdjacentElement("afterbegin", checkbox);
+            }
             checkbox.dataset.chatId = chatId;
-
-            checkboxOrder.push(checkbox); // Maintain order
-
-            checkbox.addEventListener("click", (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-
-                setTimeout(() => {
-                    if (e.shiftKey && lastClickedCheckbox) {
-                        handleRangeSelection(e.target, lastClickedCheckbox);
-                    } else {
-                        handleSingleSelection(e.target);
-                    }
-                    lastClickedCheckbox = e.target;
-                }, 1);
-            });
-
-            link.insertAdjacentElement("afterbegin", checkbox);
+            checkbox.checked = selectedChats.has(chatId);
+            checkbox.setAttribute("aria-label", `Select ${link.getAttribute("aria-label") || link.textContent.trim()}`);
+            checkboxOrder.push(checkbox);
         });
+        if (isCheckboxMode) {
+            sidebarObserver.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ["href", "data-sidebar-chatgpt-conversation-key"],
+            });
+        }
     }
 
     // Function to remove checkboxes
     function removeCheckboxes() {
+        sidebarObserver.disconnect();
         const checkboxes = document.querySelectorAll(".bulk-checkbox");
         checkboxes.forEach((checkbox) => checkbox.remove());
         selectedChats.clear();
         // Reset range selection state
-        lastClickedCheckbox = null;
+        lastClickedChatId = null;
         checkboxOrder = [];
     }
 
@@ -126,70 +172,73 @@
         }
     }
 
-    // Main deleting function
-    async function deleteSelectedChats() {
-        if (selectedChats.size === 0) return;
-
-        try {
-            const token = await getAuthToken();
-
-            // Create all delete promises at once (parallel execution)
-            const deletePromises = Array.from(selectedChats).map(async (chatId) => {
-                try {
-                    const response = await fetch(buildDeleteUrl(chatId), {
-                        method: "PATCH",
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ is_visible: false }),
-                    });
-
-                    if (response.ok) {
-                        // Remove the chat element from DOM
-                        const chatLink = document.querySelector(
-                            `a[href="/c/${chatId}"]`,
-                        );
-                        if (chatLink) {
-                            chatLink.closest("a").remove();
-                        }
-                        return { chatId, success: true };
-                    } else {
-                        return { chatId, success: false, error: `HTTP ${response.status}` };
-                    }
-                } catch (error) {
-                    console.error(`Failed to delete chat ${chatId}:`, error);
-                    return { chatId, success: false, error: error.message };
-                }
-            });
-
-            // Wait for all deletions to complete
-            const results = await Promise.allSettled(deletePromises);
-
-            const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
-            const failed = results.length - successful;
-
-            console.log(`Deletion complete: ${successful} successful, ${failed} failed`);
-        } catch (error) {
-            console.error("Failed to delete chats:", error);
+    // ChatGPT rejects bursts of deletes with 404/500, so send them one at a time and retry.
+    async function deleteChat(chatId, token) {
+        let error;
+        for (let attempt = 1; attempt <= DELETE_ATTEMPTS; attempt++) {
+            if (attempt > 1) await sleep(1000 * 2 ** (attempt - 2));
+            try {
+                const response = await fetch(buildDeleteUrl(chatId), {
+                    method: "PATCH",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ is_visible: false }),
+                });
+                if (response.ok) return null;
+                error = `HTTP ${response.status}`;
+                // Retrying cannot fix an authentication failure.
+                if (response.status === 401 || response.status === 403) break;
+            } catch (e) {
+                error = e.message;
+            }
         }
+        return error;
     }
 
-    function handleRangeSelection(currentCheckbox, lastCheckbox) {
+    // Main deleting function; returns the IDs that could not be deleted
+    async function deleteSelectedChats() {
+        const failed = [];
+        let token;
+        try {
+            token = await getAuthToken();
+        } catch (error) {
+            console.error("Failed to delete chats:", error);
+            return [...selectedChats];
+        }
+
+        for (const chatId of selectedChats) {
+            const error = await deleteChat(chatId, token);
+            if (error) {
+                console.warn(`Failed to delete chat ${chatId}: ${error}`);
+                failed.push(chatId);
+                continue;
+            }
+            // Remove the complete row, including its action buttons.
+            getChatLinks().forEach((link) => {
+                if (getChatId(link) === chatId) {
+                    (link.closest(CHAT_ROW) || link).remove();
+                }
+            });
+        }
+
+        console.log(`Deletion complete: ${selectedChats.size - failed.length} successful, ${failed.length} failed`);
+        return failed;
+    }
+
+    function handleRangeSelection(currentCheckbox, lastChatId, targetState) {
         const currentIndex = checkboxOrder.indexOf(currentCheckbox);
-        const lastIndex = checkboxOrder.indexOf(lastCheckbox);
+        const lastIndex = checkboxOrder.findIndex((checkbox) => checkbox.dataset.chatId === lastChatId);
 
         if (currentIndex === -1 || lastIndex === -1) {
             // Fallback to single selection if indices not found
-            handleSingleSelection(currentCheckbox);
+            handleSingleSelection(currentCheckbox, targetState);
             return;
         }
 
         const startIndex = Math.min(currentIndex, lastIndex);
         const endIndex = Math.max(currentIndex, lastIndex);
-
-        // Determine target state based on current checkbox
-        const targetState = !currentCheckbox.checked;
 
         // Apply state to all checkboxes in range
         for (let i = startIndex; i <= endIndex; i++) {
@@ -206,9 +255,9 @@
         }
     }
 
-    function handleSingleSelection(checkbox) {
+    function handleSingleSelection(checkbox, targetState) {
         const chatId = checkbox.dataset.chatId;
-        checkbox.checked = !checkbox.checked;
+        checkbox.checked = targetState;
 
         if (checkbox.checked) {
             selectedChats.add(chatId);
@@ -219,18 +268,34 @@
 
     // Button click handler
     async function handleButtonClick() {
+        if (isDeleting) return;
         if (!isCheckboxMode) {
             // First click: add checkboxes
-            addCheckboxes();
             isCheckboxMode = true;
-        } else {
-            // Second click: delete selected or just remove checkboxes
-            if (selectedChats.size > 0) {
-                await deleteSelectedChats();
-            }
-            removeCheckboxes();
-            isCheckboxMode = false;
+            addCheckboxes();
+            return;
         }
+        // Second click: delete selected or just remove checkboxes
+        if (selectedChats.size > 0) {
+            setDeleting(true);
+            const failed = await deleteSelectedChats().finally(() => setDeleting(false));
+            if (failed.length > 0) {
+                // Keep only the failures selected so another click retries them.
+                selectedChats.clear();
+                failed.forEach((chatId) => selectedChats.add(chatId));
+                addCheckboxes();
+                return;
+            }
+        }
+        removeCheckboxes();
+        isCheckboxMode = false;
+    }
+
+    function setDeleting(deleting) {
+        isDeleting = deleting;
+        bulkDeleteButton.disabled = deleting;
+        bulkDeleteButton.style.opacity = deleting ? "0.5" : "1";
+        bulkDeleteButton.style.cursor = deleting ? "wait" : "pointer";
     }
 
     // Initialize floating button
